@@ -5,7 +5,6 @@ Created on Fri May 22 10:40:55 2020
 """
 import numpy as np
 import functions as fn
-import pandas as pd
 import time, os, errno, copy, pickle
 import matplotlib.pylab as plt
 import cProfile, pstats, io
@@ -17,6 +16,7 @@ frequency = 2500  # Set Frequency To 2500 Hertz
 duration = 500  # Set Duration To 1000 ms == 1 second
 #winsound.Beep(frequency, duration)
 
+#import pandas as pd
 #from scipy.spatial import cKDTree
 #import matplotlib.mlab as mlab
 #import scipy.spatial
@@ -26,11 +26,7 @@ duration = 500  # Set Duration To 1000 ms == 1 second
 
 
 '''
-TODO:
-	-histogram map
-	-parcel density plot
-	-look for realistic numbers
-	
+TODO:	
 	-add data saving
 	-(b1[0]*b1[0] + b1[1]*b1[1] + b1[2]*b1[2])**0.5 vs np.sqrt(np.sum(points[i]**2))
 
@@ -58,108 +54,128 @@ def profile(fnc):
 
 class Guesswork():
 	def __init__(self,**args):        
-		'Initialization with semi-dummy numbers' 
-		np.random.seed(seed=14)
+		'Initialization with TT+CC numbers ' 
+		'''
+		T-32ELP-T
+		self.L_tag_link = 20.8 * 1e-9 #[m] length of linker between 2 tags (Angs into metres)
+		self.k_tag_tag = 0.0014063 #[N/m] Force/displacement constant (pN/nm)
+		self.M_tag_link = 17980.33 * 1.660539e-27 # 20924.33-2tags
+		kbend = ktwist = 0
 		
+		T-sasg-T
+		self.L_tag_link = 20.8 * 1e-9 #[m] length of linker between 2 tags (Angs into metres)
+		self.k_tag_tag = 0.0014063 #[N/m] Force/displacement constant (pN/nm)
+		self.M_tag_link = 17980.33 * 1.660539e-27 # 20924.33-2tags
+		kself.k_bend_tag1 = 153e-21 #[Nm/rad] Force/bend constant		
+		
+		T-sasglong-T
+		
+		
+		CCCC
+		self.M_cat_link = 663 * 1.660539e-27 #[kg] mass of linker between 2 2 catchers
+		self.k_cat_cat = 0.02813 #[N/m] Force/displacement constant 10*k_ELP16
+		self.L_cat_link = 2 * 1e-9  #[m] length of linker between 2 2 catchers
+		
+		CCC
+		
+		#''' 
 		self.N_tags_in_chain = 2 #[-] Linkers in chain
-		self.N_t_chains = 500#[-] N of linker chains	
+		self.N_t_chains = 50#[-] N of linker chains	
 		self.N_cats_in_chain = 4 #[-] catchers in array
-		self.N_c_chains = 250 #[-] N of catcher chains
+		self.N_c_chains = 25 #[-] N of catcher chains
 		
-		self.L_tag_link = 190 * 1e-10 #[m] length of linker between 2 tags (Angs into metres)
-		self.L_tag = 33 * 1e-10  #[m] length of tag
-		self.L_cat_link = 15 * 1e-10  #[m] length of linker between 2 2 catchers
-		self.L_cat = 42.6 * 1e-10  #[m] length of catcher		
+		self.L_tag_link = 19 * 1e-9 #[m] length of linker between 2 tags (Angs into metres)
+		self.L_tag = 3.3 * 1e-9  #[m] length of tag
+		self.L_cat_link = 1.5 * 1e-9  #[m] length of linker between 2 2 catchers
+		self.L_cat = 4.26 * 1e-9  #[m] length of catcher		
 		
 		self.Dang_tag = 0 #[rad] normal dihedral angle on tag linker (measured from the lower index point vector PV1-P1-P2-PV2)
 		self.Dang_cat = 0 #[rad] normal dihedral angle on catcher linker
 		self.Bang_tag1 = np.pi #[rad] normal bending angle on tag linker lower index point vector PV1-P1-P2
-		self.Bang_tag2 = np.pi #[rad] normal bending angle on tag linker higher index point vector P1-P2-PV2
 		self.Bang_cat1 = 135 /180*np.pi #[rad] normal bending angle on catcher linker lower index point vector PV1-P1-P2
-		self.Bang_cat2 = 45  /180*np.pi #[rad] normal bending angle on catcher linker higher index point vector P1-P2-PV2
 		
 		
+		# ELP 60 reps = 60nm   500e-12 / 300e-9 / 60 = 2.778e-05 #[N/m]
+		#tag-16elp-tag
 		self.k_tag_tag = 500e-12 / 300e-9 #[N/m] Force/displacement constant (pN/nm) https://pubs.acs.org/doi/10.1021/acsnano.7b02694
-		self.k_cat_cat = 500e-12 / 300e-9 #[N/m] Force/displacement constant
-		self.k_tag_cat = 500e-12 / 300e-9 #[N/m] Force/displacement constant
+		self.k_cat_cat = 0.02813 #500e-12 / 300e-9 #[N/m] Force/displacement constant
 		self.k_bend_tag1 = 153e-21 #[Nm/rad] Force/bend constant
-		self.k_bend_tag2 = 153e-21 #[Nm/rad] Force/bend constant
-		self.k_bend_cat1 = 153e-21 #[Nm/rad] Force/bend constant
-		self.k_bend_cat2 = 153e-21 #[Nm/rad] Force/bend constant
+		self.k_bend_cat1 = 300e-21 #[Nm/rad] Force/bend constant
 		self.k_twist_tag = 153e-21 #[Nm/rad] Force/bend constant
 		self.k_twist_cat = 153e-21 #[Nm/rad] Force/bend constant
 		# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3149232/
 		# IGG-G torsion spring constant converges to a minimum value of 1.5 × 103 pN·nm/rad 
 		# that corresponds to a torsion modulus of 4.5 × 104 pN·nm2.  == 154.5e-21[Nm/rad]
 
+		self.k_coll =  1e3*self.k_tag_tag # [N/m]
+		self.temp = 293.15 #[K] 20C
+		self.U_bond = -305000 / 6.022e23 #[J/molecule] energy of creating one bond (C-N bond)
+		self.box = 95 * 1e-9  #[m]   size of BB   1mm = 1e-3 , 1um = 1e-6 , 1nm = 1e-9,  1pm = 1e-12
+		
+		
+		self.M_tag_link = 23914 * 1.660539e-27  #[kg] mass of linker between 2 tags (Daltons into kgs)
+		self.M_tag = 1472 * 1.660539e-27 #[kg] mass of tag
+		self.M_cat_link = 663 * 1.660539e-27 #[kg] mass of linker between 2 2 catchers
+		self.M_cat = 12590 * 1.660539e-27 #[kg] mass of catcher
+		#'''
+
+		self.Bang_tag2 = np.pi - self.Bang_tag1#np.pi #[rad] normal bending angle on tag linker higher index point vector P1-P2-PV2
+		self.Bang_cat2 = np.pi - self.Bang_cat1#45  /180*np.pi #[rad] normal bending angle on catcher linker higher index point vector P1-P2-PV2
+		self.k_bend_tag2 = self.k_bend_tag1 #[Nm/rad] Force/bend constant
+		self.k_bend_cat2 = self.k_bend_cat1 #[Nm/rad] Force/bend constant
+
 		self.R_col_tag = self.L_tag/2. #[m]
 		self.R_col_cat = self.L_cat/2. #[m]
-		self.F_coll = np.array([0, 1e3*self.k_tag_tag]) # F = [0] + [1]*coll_dist
-
 		self.i_positions = 'rnd' # options are 'mid' 'rnd'
 		self.save_name = 'Diff-3D.dump' # File save name
-		self.temp = 300 #[K]
-		self.box = 1000 * 1e-10  #[m]   size of BB   1mm = 1e-3 , 1um = 1e-6 , 1nm = 1e-9,  1pm = 1e-12
-		self.save_steps = 1 #[-]   Number of saves per simulation
-		self.save_freq = 1 #self.N_t_steps/self.save_steps # How many sim steps to wait before saving
+		#self.save_steps = 1 #[-]   Number of saves per simulation
+		self.save_freq = 10 #self.N_t_steps/self.save_steps # How many sim steps to wait before saving
 		
-		self.boundary = 2 # 0 = no bounds; 1 = reflective bounds; 2 = periodic bounds
+		self.boundary = 2 # 0 = no bounds; 2 = periodic bounds
 		self.collisions = 1 # 0 for no collisions, 1 for collisions
 		self.linking_collisions = 1 # 0 for no linking_collisions, 1 for linking_collisions
-		self.to_noisyfric = 1 # if true add random force component according to langevin
 		self.to_plot_all = 1
 		
 		self.link_r = 1.1 * (self.R_col_tag + self.R_col_cat) # distance required for bonding to occur
 		self.link_chance = 1 # chance for bond to occur during collision (1 = 100%, 0 = 0%)
-		self.U_bond = -305000 / 6.022e23 #[J/molecule] energy of creating one bond (C-N bond)
-		self.link_stretch = 1.1  # how much stretch should the links be initialized with, 1 = no stretch
-		self.acc_steps = 8000 #
-		self.L50_cutoff =  0.98
+		self.link_stretch = 1.05  # how much stretch should the links be initialized with, 1 = no stretch
+		#self.acc_steps = 8000 #
+		self.Nvar_cutoff =  0.98
+		self.Nvar_val = 0
 
 
-		
-		self.M_tag_link = 23914 * 1.660539e-27  #[m] mass of linker between 2 tags (Daltons into metres)
-		self.M_tag = 1472 * 1.660539e-27 #[kg] massof tag
-		self.M_cat_link = 663 * 1.660539e-27 #[kg] mass of linker between 2 2 catchers
-		self.M_cat = 12590 * 1.660539e-27 #[kg] mass of catcher
 		self.init_params()		
 		# Sim stops N_points*3 accepted steps after N_bond == max bonds 
-		# or n_prop/n_acc > N_points*10
-		# or L50 == L50_cutoff
+		# or n_prop/self.n_acc > N_points*10
+		# or Nvar == Nvar_cutoff
 
 
 	def init_params(self):
+		self.rs = np.random.RandomState(32) #random state
+
 		self.dirname = os.path.dirname(os.path.abspath(__file__))
 		self.dumps_dir= os.path.join(self.dirname, 'dumps')
+		self.data_dir= os.path.join(self.dirname, 'data')
 		self.npsave_dir= os.path.join(self.dirname, 'npsaves')
 		self.boltz = 1.38064852e-23 # [m^2 kg s^-2 K^-1] Boltzmann constant
+		self.prot_dens = 1420 # kg/m^3 average protein density
 		self.kBT = self.boltz*self.temp
 		self.max_bonds = min(self.N_t_chains*self.N_tags_in_chain, self.N_cats_in_chain*self.N_c_chains)
 		# 1 [Da] is 1.66053904e-27 [kg]
 		self.L_tag_tag = self.L_tag + self.L_tag_link #[N/m] Force/displacement constant
 		self.L_cat_cat = self.L_cat + self.L_cat_link #[N/m] Force/displacement constant
-		self.L_tag_cat =(self.L_tag + self.L_cat)*0.5 #[N/m] Force/displacement constant
-
-		if True:
-			#visc from https://wiki.anton-paar.com/en/water/
-			water_visc = np.asarray(pd.read_csv('water_visc.txt', sep=" \t", header=0, engine='python'))
-			water_visc[:,0] += 273.15 # move temps from C to K
-			water_visc[:,1] /= 1e3 # move dynamic viscosity units from mPa*s to Pa*s
-		self.visc = np.interp(self.temp, water_visc[:,0], water_visc[:,1]) #[Pa s] viscosity of solvent 8.53e-4
 
 		#Set up dict for types 
 		#N	        0 	      1 	   2 	 	 3 	 	  4 	 	 5  	   6             7
 		self.Tn = ['t_side', 't_mid', 'c_side', 'c_mid', 't_alone', 'c_alone','stretch_p1','stretch_p2']
-		#type_params = ['m', 'k', 'r', 'l']
+		#type_params = ['Type', 'Protein Type', 'mass', 'Rcol', 'Rdiff']
 		self.T_dic = dict(
-			t_side 	=dict( T=0, PT='t', m=self.M_tag+0.5*self.M_tag_link, Rcol=self.R_col_tag, Rdiff = self.R_col_tag),
-			t_mid 	=dict( T=1, PT='t', m=self.M_tag+self.M_tag_link, 	  Rcol=self.R_col_tag, Rdiff = self.R_col_tag),
-			c_side  =dict( T=2, PT='c', m=self.M_cat+0.5*self.M_cat_link, Rcol=self.R_col_cat, Rdiff = self.R_col_cat),
-			c_mid   =dict( T=3, PT='c', m=self.M_cat+self.M_cat_link,  	  Rcol=self.R_col_cat, Rdiff = self.R_col_cat),
-			t_alone =dict( T=4, PT='t', m=self.M_tag,  Rcol=self.R_col_tag, Rdiff = self.R_col_tag),
-			c_alone =dict( T=5, PT='c', m=self.M_cat,  Rcol=self.R_col_cat, Rdiff = self.R_col_cat),
-			stretch_p1=dict(T=6, PT='', m=0,  Rcol=0.5*self.R_col_tag, Rdiff = 0),
-			stretch_p2=dict(T=7, PT='', m=0,  Rcol=0.5*self.R_col_tag, Rdiff = 0)
+			t_side 	=dict( T=0, PT='t', m=self.M_tag+0.5*self.M_tag_link, Rcol=self.R_col_tag),
+			t_mid 	=dict( T=1, PT='t', m=self.M_tag+self.M_tag_link, 	  Rcol=self.R_col_tag),
+			c_side  =dict( T=2, PT='c', m=self.M_cat+0.5*self.M_cat_link, Rcol=self.R_col_cat),
+			c_mid   =dict( T=3, PT='c', m=self.M_cat+self.M_cat_link,  	  Rcol=self.R_col_cat),
+			t_alone =dict( T=4, PT='t', m=self.M_tag,  Rcol=self.R_col_tag),
+			c_alone =dict( T=5, PT='c', m=self.M_cat,  Rcol=self.R_col_cat)
 			)
 		# 	 	 	   	 	 0    1    2    3    4    5    6    7    8    9     10    11    12    13   14   15
 		self.link_params1 =['N1','N2','Ln','x1','y1','z1','x2','y2','z2','x12','y12','z12','L12','k', 'Ul','Nl']
@@ -170,16 +186,12 @@ class Guesswork():
 		self.link_params = self.link_params1 + self.link_params2 + self.link_params3
 		# N=index, V=vector for point, R=reflected coordinates if necessary
 		
-		
 		# 	 	 	     	 	  0           1             2        3       4     5     6      7        8
-		self.measured_params = ['acc_moves', 'prop_moves', 'Utot', 'bonds','L50']#,'avg_L']
+		self.measured_params = ['acc_moves', 'prop_moves', 'Utot', 'bonds','N25','N50','N75']#,'avg_L']
 		# 	 	 	   	 	  0    1    2    3    4     5     6      7        8       9        10    11    12
 		self.point_params = ['N', 'x', 'y', 'z', 'Uc', 'T', 'Rcol', 'linked','Nlink','colour','Vx', 'Vy', 'Vz']
 		self.N_point_params = len(self.point_params)
 		self.N_points = self.N_t_chains*self.N_tags_in_chain + self.N_cats_in_chain*self.N_c_chains
-		self.saver = np.empty((self.N_points, self.N_point_params, self.save_steps))
-		if self.M_cat == self.M_tag:
-			print('linkers and catchers cant have the same mass')
 		if self.R_col_tag <= self.R_col_cat and self.link_r <= self.R_col_cat:
 			self.max_R_col = self.R_col_cat*2.
 		elif self.R_col_tag >= self.R_col_cat and self.link_r <= self.R_col_tag:
@@ -188,19 +200,31 @@ class Guesswork():
 		self.hist_boxes = 30
 		self.hist_ints = np.linspace(0, self.N_points, self.hist_boxes+1)
 		self.density_partitions = 0
-		print('to balance out bond energy {} [J/molecule]'.format(self.U_bond))
-		bond_stretch = np.sqrt(-2*self.U_bond/self.k_tag_tag)
-		print('tag link has to be stretched by {} [m]  ({:.3f}%)'.format(bond_stretch, bond_stretch/self.L_tag_tag))
-		bond_stretch = np.sqrt(-2*self.U_bond/self.k_cat_cat)
-		print('cat link has to be stretched by {} [m]  ({:.3f}%)'.format(bond_stretch, bond_stretch/self.L_cat_cat))
-		bond_bend = -2*self.U_bond/self.k_bend_tag1
-		print('tag link has to be bent by {:.3f} [rad]  ({:.3f}°)'.format(bond_bend, bond_bend*180/np.pi))
-		bond_bend = -2*self.U_bond/self.k_bend_cat1
-		print('cat link has to be bent by {:.3f} [rad]  ({:.3f}°)'.format(bond_bend, bond_bend*180/np.pi))
-		bond_twist = -2*self.U_bond/self.k_twist_tag
-		print('tag link has to be twisted by {:.3f} [rad]  ({:.3f}°)'.format(bond_twist, bond_twist*180/np.pi))
-		bond_twist = -2*self.U_bond/self.k_twist_cat
-		print('cat link has to be twsited by {:.3f} [rad]  ({:.3f}°)'.format(bond_twist, bond_twist*180/np.pi))	
+		
+		self.cat_mass = self.N_c_chains*((self.N_cats_in_chain-1)*self.M_cat_link + self.N_cats_in_chain*self.M_cat)
+		self.tag_mass = self.N_t_chains*((self.N_tags_in_chain-1)*self.M_tag_link + self.N_tags_in_chain*self.M_tag)
+		self.water_mass = (self.box**3 - (self.cat_mass + self.tag_mass)/self.prot_dens) * 1000 # volume * water density kg/m^3
+		print('prot mass frac of Tag chains is = {:.3f}%'.format(self.tag_mass/self.water_mass*100))
+		print('prot mass frac of Cat chains is = {:.3f}%'.format(self.cat_mass/self.water_mass*100))
+		print('prot mass frac of prots is = {:.3f}%'.format((self.tag_mass+self.cat_mass)/self.water_mass*100))
+		if True:
+			try:
+				print('\nto balance out bond energy {} [J/molecule]'.format(self.U_bond))
+				bond_stretch = np.sqrt(-2*self.U_bond/self.k_tag_tag)
+				print('tag link has to be stretched by {} [m]  ({:.3f}%)'.format(bond_stretch, bond_stretch/self.L_tag_tag))
+				bond_stretch = np.sqrt(-2*self.U_bond/self.k_cat_cat)
+				print('cat link has to be stretched by {} [m]  ({:.3f}%)'.format(bond_stretch, bond_stretch/self.L_cat_cat))
+				bond_bend = np.sqrt(-2*self.U_bond/self.k_bend_tag1)
+				print('tag link has to be bent by {:.3f} [rad]  ({:.3f}°)'.format(bond_bend, bond_bend*180/np.pi))
+				bond_bend = np.sqrt(-2*self.U_bond/self.k_bend_cat1)
+				print('cat link has to be bent by {:.3f} [rad]  ({:.3f}°)'.format(bond_bend, bond_bend*180/np.pi))
+				bond_twist = np.sqrt(-2*self.U_bond/self.k_twist_tag)
+				print('tag link has to be twisted by {:.3f} [rad]  ({:.3f}°)'.format(bond_twist, bond_twist*180/np.pi))
+				bond_twist = np.sqrt(-2*self.U_bond/self.k_twist_cat)
+				print('cat link has to be twsited by {:.3f} [rad]  ({:.3f}°)'.format(bond_twist, bond_twist*180/np.pi))	
+			except:
+				pass
+
 	
 	def create_arrs(self):
 		#start = time.time()
@@ -223,35 +247,39 @@ class Guesswork():
 			self.obj_list.append([i])
 			if self.N_tags_in_chain >1:
 				con_l.append([i+1])
-				points[i, 5] = 0
+				points[i, 5] = 0  # set point type
 				for n in range(1, self.N_tags_in_chain-1):
 					self.obj_list[-1].append(i+n)
 					con_l.append([i+n-1,i+n+1])
-					points[i+n, 5] = 1
+					points[i+n, 5] = 1  # set point type
 				self.obj_list[-1].append(i+self.N_tags_in_chain-1)
 				con_l.append([i+self.N_tags_in_chain-2])
 				points[i+self.N_tags_in_chain-1,5] = 0  # set point type
+			
 			elif self.N_tags_in_chain == 1:
 				con_l.append([])
 				points[i,5] = 4 # set point type		
+		
 		for i in range(self.N_tags_in_chain*self.N_t_chains, self.N_points, self.N_cats_in_chain):
 			self.obj_list.append([i])
 			if self.N_cats_in_chain > 1:
 				con_l.append([i+1])
-				points[i, 5] = 2
+				points[i, 5] = 2  # set point type
 				for n in range(1, self.N_cats_in_chain-1):
 					self.obj_list[-1].append(i+n)
 					con_l.append([i+n-1,i+n+1])
-					points[i+n, 5] = 3
+					points[i+n, 5] = 3  # set point type
 				self.obj_list[-1].append(i+self.N_cats_in_chain-1)
 				con_l.append([i+self.N_cats_in_chain-2])				
-				points[i+self.N_cats_in_chain-1, 5] = 2
+				points[i+self.N_cats_in_chain-1, 5] = 2  # set point type
+			
 			elif self.N_cats_in_chain == 1:
 				con_l.append([])
 				points[i,5] = 5 # set point type	
 		
 		# Set colour numbers for objects
-		self.obj_colours = np.linspace(0, 10, self.N_t_chains + self.N_c_chains).astype('float16')
+		self.obj_colours = np.arange(0, self.N_t_chains + self.N_c_chains, 1).astype('uint64')
+		#self.obj_colours = np.linspace(0, 10, self.N_t_chains + self.N_c_chains).astype('float16')
 		self.obj_colours_list = self.obj_colours.tolist()
 		for i, obj in enumerate(self.obj_list):
 			for p in obj:
@@ -290,10 +318,6 @@ class Guesswork():
 						links[N_link,28:30] = self.k_twist_cat, self.Dang_cat
 						links[N_link,32:34] = self.k_bend_cat1, self.Bang_cat1
 						links[N_link,36:38] = self.k_bend_cat2, self.Bang_cat2					
-					else:
-						links[N_link,2] = self.L_tag_cat
-						links[N_link,13] = self.k_tag_cat
-						print('In array creation bend and twist is not ready for t-c links')
 					links[N_link,0:2] = N1, N2
 					N_link += 1
 		
@@ -308,10 +332,10 @@ class Guesswork():
 				point[10:13] = point[1:4] + self.random_three_vector()
 
 		if self.i_positions == 'rnd':
-			points[:,1:4] = self.box * np.random.rand(self.N_points,3)	
+			points[:,1:4] = self.box * self.rs.rand(self.N_points,3)	
 			# Moving linked points to proper distance around in random orientations
 			for link in links:
-				vec = np.random.rand(1,3) * np.random.choice([-1,1], size=(1,3))	
+				vec = self.rs.rand(1,3) * self.rs.choice([-1,1], size=(1,3))	
 				dis = np.sqrt(np.sum(vec**2))
 				norm_vec = vec / dis[np.newaxis].T
 				points[int(link[1]),1:4] = points[int(link[0]),1:4] + link[2]*norm_vec*self.link_stretch			
@@ -355,7 +379,7 @@ class Guesswork():
 					if N2 not in con_l[N1]:
 						Rcol12 = (self.T_dic[self.Tn[T1]]['Rcol'] + self.T_dic[self.Tn[T2]]['Rcol'])
 						if Rcol12 > l_col:
-							Ucol += 0.5 * self.F_coll[1] * (Rcol12 - l_col)**2
+							Ucol += 0.5 * self.k_coll * (Rcol12 - l_col)**2
 				if self.linking_collisions:
 					# Check for previously found bonding collision
 					if 	points[N1,7] == 1. and points[N2,7] == 1.:
@@ -364,8 +388,8 @@ class Guesswork():
 					# Check for new found bonding collision
 					if l_col <= self.link_r:
 						if  self.T_dic[self.Tn[T1]]['PT'] != self.T_dic[self.Tn[T2]]['PT'] \
-							and points[N1,7]==0. and points[N2,7]==0. \
-							and (self.link_chance - np.random.rand(1)) > 0. :
+							and points[N1,7]==0. and points[N2,7]==0.  :
+							#and (self.link_chance - self.rs.rand(1)) > 0. :
 							points[N1,7] = 1.
 							points[N2,7] = 1.
 							points[N1,8] = N2
@@ -415,13 +439,13 @@ class Guesswork():
 		for link in links:
 			# Dihedral angle and energy
 			link[30] = self.dihedral(link[16:19], link[3:6], link[22:25], link[25:28])
-			link[31] = 0.5 * link[28] * np.abs(link[30] - link[29])
+			link[31] = 0.5 * link[28] * (link[30] - link[29])**2
 			# Bend1 angle and energy
 			link[34] = self.angle(link[16:19], link[3:6], link[22:25])
-			link[35] = 0.5 * link[32] * np.abs(link[34] - link[33])
+			link[35] = 0.5 * link[32] * (link[34] - link[33])**2
 			# Bend2 angle and energy
 			link[38] = self.angle(link[3:6], link[22:25], link[25:28])
-			link[39] = 0.5 * link[36] * np.abs(link[38] - link[37])
+			link[39] = 0.5 * link[36] * (link[38] - link[37])**2
 		
 
 		# Add all energies for each point
@@ -442,18 +466,18 @@ class Guesswork():
 		
 		#print('{:.4f}s, {}-points array creation time'.format(time.time() - start,self.N_points))
 		self.points, self.links, self.con_l, self.col_l= points, links, con_l, col_l
-		self.density_plot()
+		#self.density_plot()
 		return points, links, con_l, col_l
 
 
 
 
-	@profile
+	#@profile
 	def run_MC(self):
 		self.create_arrs()
 		self.prop_moves = 0
 		# 	 	 	     	 	  0           1             2        3       4     5     6
-		#self.measured_params = ['acc_moves', 'prop_moves', 'Utot', 'bonds','L50','avg_L']
+		#self.measured_params = ['acc_moves', 'prop_moves', 'Utot', 'bonds','Nvar','avg_L']
 		n_save = 0
 		self.measures = np.zeros((3000, len(self.measured_params)))
 		self.hist = np.zeros((3000, self.hist_boxes)).astype('uint64')
@@ -462,23 +486,24 @@ class Guesswork():
 		self.measures[0,2] = np.sum(self.points[:,4])/2. #check this at some point
 		self.measures[0,3] = np.sum(self.points[:,7])/2. 
 		self.get_obj_len()
-		self.measures[0,4] = self.L50()
+		self.measures[0,4] = self.Nvar(N = self.Nvar_val)
+		#self.measures[0,5] = self.Nvar(N = 50)
+		#self.measures[0,6] = self.Nvar(N = 75)
 		#self.measures[0,5] = self.avg_L()
 		self.hist[0] = self.histogram()
 		self.save_points = np.empty((*self.points.shape,3000))
 		self.save_points[:,:,0] = self.points
 		prop_stopper = True
-		bond_stopper = [1,1,0] # should continue?, have not checked yet?, n_acc when first hit max bonds
+		bond_stopper = [1,1,0] # should continue?, have not checked yet?, self.n_acc when first hit max bonds
 	
 		start = time.time()
-		fn.printProgressBar(self.measures[-1,4], self.L50_cutoff, prefix = 'MC Simulation:', suffix = '', length = 30)
-		n_acc = 0
-		while (self.measures[n_save,4] < self.L50_cutoff and prop_stopper and n_acc<self.acc_steps and bond_stopper[0]):
-			#print('\n\n\npoints\n',self.points, '\nlinks\n',self.links, '\ncon_l\n',self.con_l, '\ncol_l\n',self.col_l)
+		fn.printProgressBar(self.measures[-1,4], self.Nvar_cutoff, prefix = 'MC Simulation:', suffix = '', length = 30)
+		self.n_acc = 0
+		while (self.measures[n_save,4] < self.Nvar_cutoff and prop_stopper and bond_stopper[0]):# and self.n_acc<self.acc_steps ):
 			# Propose move and orientation vector
 			self.prop_moves += 1
 			new_point = np.zeros(self.points[0,:].shape)
-			index = np.random.randint(0, high=self.N_points)
+			index = self.rs.randint(0, high=self.N_points)
 			new_point[0:7] = self.points[index,0:7]
 			new_point[9] = self.points[index,9]
 
@@ -501,7 +526,7 @@ class Guesswork():
 					center = self.points[self.con_l[index][0],1:4] 
 					range_om = np.sqrt(-2*self.U_bond + 2*self.points[index,4] + 3.21888*self.kBT)/np.sqrt(k)
 					min_range = Ln - range_om
-					if min_range < 0.95*2*new_point[6]:
+					if min_range < 0.95*2*new_point[6]: # check to avoid needless collisions
 						min_range = 0.95*2*new_point[6]					
 				
 				elif len(self.con_l[index]) == 2:
@@ -516,7 +541,7 @@ class Guesswork():
 					max_range = self.box
 
 				try:
-					new_point[1:4] = center + norm_vec * np.random.uniform(min_range,max_range)
+					new_point[1:4] = center + norm_vec * self.rs.uniform(min_range,max_range)
 				except:
 					print(self.points[index,4], self.U_bond)
 					break
@@ -548,12 +573,12 @@ class Guesswork():
 					if N2 not in self.con_l[N1]:
 						Rcol12 = (self.T_dic[self.Tn[T1]]['Rcol'] + self.T_dic[self.Tn[T2]]['Rcol'])
 						if l_col < Rcol12:
-							Ucol += 0.5 * self.F_coll[1] * (Rcol12 - l_col)**2
+							Ucol += 0.5 * self.k_coll * (Rcol12 - l_col)**2
 				if self.linking_collisions:
 					if l_col < self.link_r:
 						if  self.T_dic[self.Tn[T1]]['PT'] != self.T_dic[self.Tn[T2]]['PT'] \
-							and self.points[N2,7]==0. and new_point[7]==0.\
-							and (self.link_chance - np.random.rand(1)) > 0. :
+							and self.points[N2,7]==0. and new_point[7]==0.:
+							#and (self.link_chance - self.rs.rand(1)) > 0. :
 							new_point[7:9] = 1., N2
 							Ucol += self.U_bond
 							# Turning the new point so I dont have to touch the other one 
@@ -599,13 +624,13 @@ class Guesswork():
 					link = new_links[i]
 					# Dihedral angle and energy
 					link[30] = self.dihedral(link[16:19], link[3:6], link[22:25], link[25:28])
-					link[31] = 0.5 * link[28] * np.abs(link[30] - link[29])
+					link[31] = 0.5 * link[28] * (link[30] - link[29])**2
 					# Bend1 angle and energy
 					link[34] = self.angle(link[16:19], link[3:6], link[22:25])
-					link[35] = 0.5 * link[32] * np.abs(link[34] - link[33])
+					link[35] = 0.5 * link[32] * (link[34] - link[33])**2
 					# Bend2 angle and energy
 					link[38] = self.angle(link[3:6], link[22:25], link[25:28])
-					link[39] = 0.5 * link[36] * np.abs(link[38] - link[37])
+					link[39] = 0.5 * link[36] * (link[38] - link[37])**2
 
 				new_Ulink = np.array([np.sum(new_links[:,14]), np.sum(new_links[:,31]), np.sum(new_links[:,35]), np.sum(new_links[:,39])])
 	
@@ -626,60 +651,17 @@ class Guesswork():
 			
 			# Acceptance check
 			if self.yay_or_nay(self.points[index,4], new_point[4]):
-				n_acc += 1
-				
+				self.n_acc += 1
+
 				# Changing point and its bond if there is any
 				if self.points[index,7]:
-					if not self.points[index,8] == new_point[8]:
+					if not (self.points[index,8] == new_point[8] and (not new_point[7]==0.)):
 						N_disconected = int(self.points[index,8])
 						self.split_objects(self.points[index])
+						new_point[9] = self.points[index,9]
 						self.points[N_disconected,7:9] = 0., 0.
 						# check if disconnected point has no new connections
-						'''
-					if self.linking_collisions:
-						point_colls = self.C.get_neigh_indexes_from_coords(self.points[N_disconected,0:4])
-						for col in point_colls:
-							Ucol = 0
-							N1 = N_disconected
-							N2 = col				
-							l_vec = self.points[N1,1:4] - self.points[N2,1:4]
-							if self.boundary == 2: # Implementing periodic boundary
-								max_l = self.box/2.
-								for dim in range(3):
-									if l_vec[dim] > max_l: l_vec[dim] -= 2 * max_l
-									elif l_vec[dim] < -max_l: l_vec[dim] += 2 * max_l
-							l_col = np.sqrt(np.sum((l_vec)**2))
-							T1 = int(self.points[N1,5])
-							T2 = int(self.points[N2,5])		
-							if self.collisions:
-								if N2 not in self.con_l[N1]:
-									Rcol12 = (self.T_dic[self.Tn[T1]]['Rcol'] + self.T_dic[self.Tn[T2]]['Rcol'])
-									if Rcol12 > l_col:
-										Ucol += 0.5 * self.F_coll[1] * (Rcol12 - l_col)**2
-							if l_col < self.link_r:
-								if  self.T_dic[self.Tn[T1]]['PT'] != self.T_dic[self.Tn[T2]]['PT'] \
-									and self.points[N2,7]==0. and self.points[N1,7]==0.\
-									and (self.link_chance - np.random.rand(1)) > 0. :
-									
-									for i in reversed(range(len(self.col_l[N1]))):
-										if self.col_l[N1][i][0] == N2:
-											self.points[N1,4] -= self.col_l[N1][i][1]
-											del self.col_l[N1][i]
-									
-									for i in reversed(range(len(self.col_l[N2]))):
-										if self.col_l[N2][i][0] == N1:
-											self.points[N2,4] -= self.col_l[N2][i][1]
-											del self.col_l[N2][i]
-									
-									Ucol += self.U_bond
-									self.col_l[N1].append([N2,Ucol])
-									self.col_l[N2].append([N1,Ucol])
-									self.points[N1,4] += Ucol
-									self.points[N2,4] += Ucol
-									self.points[N1,7:9] = 1., N2
-									self.points[N2,7:9] = 1., N1
-									self.merge_objects(self.points[N1,0],self.points[N1,8])
-						'''
+
 				self.points[index,:] = new_point
 				if self.points[index,7]:
 					self.points[int(self.points[index,8]),7:9] = 1., index
@@ -710,22 +692,25 @@ class Guesswork():
 				self.col_l[index] = copy.deepcopy(col_sub_l)
 
 				self.C.move_point(new_point)
-				fn.printProgressBar(self.measures[n_save,4], self.L50_cutoff, prefix = 'MC Simulation:', suffix = '', length = 30)	
+				fn.printProgressBar(self.measures[n_save,4], self.Nvar_cutoff, prefix = 'MC Simulation:', suffix = '', length = 30)	
+				
 				
 				# Saving measures and checking stopping conditions
-				if not n_acc%self.save_freq:
+				if not self.n_acc%self.save_freq:
 					n_save += 1
 					if not n_save % 3000:
 						self.measures = np.vstack([self.measures, np.zeros((3000, self.measures.shape[1]))])	
 						self.save_points = np.concatenate((self.save_points, np.zeros((*self.points.shape, 3000))),axis=2)
 						self.hist = np.concatenate((self.hist, np.zeros((3000, self.hist_boxes))))
 					
-					self.measures[n_save,0] = n_acc
+					self.measures[n_save,0] = self.n_acc
 					self.measures[n_save,1] = self.prop_moves
 					self.measures[n_save,2] = np.sum(self.points[:,4])/2. 
 					self.measures[n_save,3] = np.sum(self.points[:,7])/2. 
 					self.get_obj_len()
-					self.measures[n_save,4] = self.L50()
+					self.measures[n_save,4] = self.Nvar(N = self.Nvar_val)
+					#self.measures[n_save,5] = self.Nvar(N = 50)
+					#self.measures[n_save,6] = self.Nvar(N = 75)
 					#self.measures[n_save,5] = self.avg_L()
 					self.save_points[:,:,n_save] = self.points
 					self.hist[n_save] = self.histogram()
@@ -735,12 +720,12 @@ class Guesswork():
 					#print(self.save_points.shape)
 					#exit()
 					if self.measures[n_save,3] == self.max_bonds and bond_stopper[1]:
-						bond_stopper[2] = n_acc
+						bond_stopper[2] = self.n_acc
 						bond_stopper[1] = 0
-					if 	(not bond_stopper[1]) and (n_acc - bond_stopper[2]) > self.N_points*3:
+					if 	(not bond_stopper[1]) and (self.n_acc - bond_stopper[2]) > self.N_points:
 						bond_stopper[0] = 0
 						print('\nstopped {} accepted steps after max bonds({}) were reached'.format(self.N_points*3, self.max_bonds))
-					if (self.measures[n_save,1] - self.measures[n_save-1,1]) > self.N_points*10:
+					if (self.measures[n_save,1] - self.measures[n_save-1,1]) > self.N_points*5:
 						prop_stopper = False
 						print('\nstopped after {} proposed steps with no accepted step'.format(self.N_points*10))
 				
@@ -749,12 +734,14 @@ class Guesswork():
 		self.save_points = self.save_points[...,:n_save+1]
 		self.hist = self.hist[:n_save+1]
 		#print(self.get_full_U(),self.measures[-1,2])
+		self.obj_bounds_crosses(Nth_obj = 0)
+		print(sorted(self.obj_len_list,reverse = True)[:10])
 		
 		if self.to_plot_all: 
 			self.plot_all()
-			self.density_plot()
+			#self.density_plot()
 
-		print('\n{:.4f}s, total run time,\t{:.4f}s per dt'.format(time.time() - start,(time.time() - start)/self.acc_steps))
+		print('{:.4f}s, total run time,\t{:.4f}s per dt'.format(time.time() - start,(time.time() - start)/self.n_acc))
 
 
 
@@ -829,12 +816,16 @@ class Guesswork():
 				if int(point[0]) in obj:
 					obj_ind1 = j
 					break
+				
 			obj_ind2 = -1
 			for k, colour in enumerate(self.obj_colours_list):
-				if not float(colour) == float(self.obj_colours[k]):
+				if not colour == self.obj_colours[k]:
 					obj_ind2 = k
+					break
+			
 			if obj_ind2 == -1:
 				obj_ind2 = k+1
+			
 			# Place bigger object in initial place and smaller object gets new colour
 			if len(new_obj_lp) >= len(new_obj_rp):
 				bigger_list = new_obj_lp
@@ -844,12 +835,15 @@ class Guesswork():
 				smaller_list = new_obj_lp
 			
 			self.obj_list[obj_ind1] = copy.deepcopy(bigger_list)
+
+			
 			for p in smaller_list:
 				self.points[p,9] = self.obj_colours[obj_ind2]
 			self.obj_list.insert(obj_ind2,copy.deepcopy(smaller_list))
 			self.obj_colours_list.insert(obj_ind2,self.obj_colours[obj_ind2])
-			
-				
+
+
+
 	def create_obj_list(self):
 		# Create object list (list of lists consisting of linked/bonded points)
 		self.obj_list = []
@@ -883,15 +877,35 @@ class Guesswork():
 		self.obj_len_list = [len(obj) for obj in self.obj_list]
 		self.obj_len_list.sort(reverse = True)
 		
-	def L50(self):
+	def Nvar(self, N = 50):
 		tot_l = 0
 		for obj_len in self.obj_len_list:
 			tot_l += obj_len
-			if tot_l > self.N_points/2.:
+			if tot_l > self.N_points*N/100:
 				return obj_len/self.N_points
 
 	def avg_L(self):
 		return sum(self.obj_len_list)/len(self.obj_len_list)/self.N_points
+
+	def obj_bounds_crosses(self, Nth_obj = 0):
+		# checking if the largest object is spanning network by counting boundary crossing links
+		self.links[:,9:12] = self.links[:,6:9] - self.links[:,3:6]
+		self.largest_obj = sorted(self.obj_list, key=len, reverse = True)[Nth_obj]
+		self.count = np.zeros((4), dtype='uint64') # total N crossing links, crossing x, crossing y, crossing z
+		max_l = self.box/2.
+		for link in self.links:
+			crossed = False
+			for dim in range(3):
+				if abs(link[9+dim]) >= max_l:	
+					if int(link[0]) in self.largest_obj:
+						self.count[1+dim] +=1
+						if not crossed:
+							self.count[0] +=1
+							crossed = True							
+		print('Nth_obj = ',Nth_obj)
+		print('\ntotal N of crossing links = {}, {} x, {} y, {} z'.format(*self.count))
+		print('boundary crossing links per box area = {} 1/nm^2'.format(self.count[0]/(6*(self.box*1e9)**2)))
+		return self.count
 
 
 	def create_graph(self):
@@ -938,7 +952,7 @@ class Guesswork():
 			plt.show()
 		return self.mu, self.sigma
 	
-		for link in MC.links: 
+		for link in self.links: 
 			if link[0]>link[1]:
 				print(link[:2].astype('uint64'))
 
@@ -1018,7 +1032,7 @@ class Guesswork():
 		plt.show()	
 
 		plt.plot(self.param, self.outs[:,5])
-		plt.ylabel('final L50')
+		plt.ylabel('final N50')
 		plt.xlabel('tag linker length')
 		plt.grid(True)
 		plt.show()
@@ -1040,7 +1054,7 @@ class Guesswork():
 			# Monte Carlo test
 			#exp( -(E_new - E_old) / kT ) >= rand(0,1)
 			x = math.exp( -(new_U - old_U) / (self.kBT) )			
-		if (x >= np.random.uniform(0.0,1.0)):
+		if (x >= self.rs.uniform(0.0,1.0)):
 			return True
 		else: return False
 
@@ -1048,34 +1062,44 @@ class Guesswork():
 		# 	 	 	  	  0           1             2        3      
 		#self.measures = ['acc_moves', 'prop_moves', 'Utot', 'bonds']
 		plt.plot(self.measures[:,0], self.measures[:,1])
-		plt.ylabel('proposed steps')
-		plt.xlabel('accepted steps')
+		plt.ylabel('Proposed steps [-]')
+		plt.xlabel('Accepted steps [-]')
 		plt.grid(True)
 		plt.show()	
 		
 		plt.plot(self.measures[1:,0], self.measures[1:,1]-self.measures[:-1,1])
-		plt.ylabel('proposed/accepted ratio')
-		plt.xlabel('accepted steps')
+		plt.ylabel('Proposed/accepted ratio')
+		plt.xlabel('Accepted steps [-]')
 		plt.grid(True)
 		plt.show()	
 
-		plt.plot(self.measures[:,0], self.measures[:,2]/self.N_points)
-		plt.ylabel('average U')
-		plt.xlabel('accepted steps')
+		plt.plot(self.measures[:,0]/self.N_points, self.measures[:,2]/self.N_points)
+		plt.ylabel('Average U [J]')
+		plt.xlabel('Accepted steps / total N of Spy proteins [-]')
 		plt.grid(True)
 		plt.show()	
-
-		plt.plot(self.measures[:,0], self.measures[:,3])
-		plt.ylabel('bonds')
+		'''
+		plt.hist(MC.obj_len_list, bins=10)
+		plt.ylabel('Object count [-]')
+		plt.xlabel('N of Spy proteins in an object[-]')
+		plt.grid(True)
+		plt.show()	
+		'''
+		plt.plot(self.measures[:,0]/self.N_points, self.measures[:,3])
+		plt.ylabel('Spy bonds [-]')
 		plt.ylim((0,self.max_bonds+1))
-		plt.xlabel('accepted steps')
+		plt.xlabel('Accepted steps / total N of Spy proteins [-]')
 		plt.grid(True)
 		plt.show()
+		print('\nSpy bonds / Max Spy bonds = ',self.measures[-1,3]/self.max_bonds)
 			
-		plt.plot(self.measures[:,0], self.measures[:,4])
-		plt.ylabel('L50')
+		plt.plot(self.measures[:,0]/self.N_points, self.measures[:,4])
+		#plt.plot(self.measures[:,0], self.measures[:,5])
+		#plt.plot(self.measures[:,0], self.measures[:,6])
+		plt.ylabel('Largest object size / total N of Spy proteins [-]')
 		plt.ylim((0,1))
-		plt.xlabel('accepted steps')
+		plt.xlabel('Accepted steps / total N of Spy proteins [-]')
+		#plt.legend(['N{}'.format(self.Nvar_val), 'N50', 'N75'], loc='best')
 		plt.grid(True)
 		plt.show()		
 		'''
@@ -1087,10 +1111,18 @@ class Guesswork():
 		plt.show()			
 		'''
 		self.hist = self.hist / self.N_points
-		plt.imshow(self.hist[::50].T, cmap='Greys', interpolation='nearest')
-		plt.ylabel('Size (N_points / max N_points) [-]')
-		plt.xlabel('Simulation save steps')
+		steps = 1
+		while True:
+			if self.hist[::steps+1].shape[0] < 2*self.hist_boxes:
+				break
+			steps += 1
+		aspect = self.hist.T.shape[1] * self.hist[::steps].T.shape[0] / self.hist[::steps].T.shape[1] * self.save_freq / self.N_points
+		plt.imshow(self.hist[::steps].T,origin = 'lower',extent = [0, self.hist.T.shape[1]*self.save_freq/self.N_points, 0, 1],aspect = aspect, cmap='Greys', interpolation='nearest')
+		plt.ylabel('Object size / total N of Spy prots [-]')
+		plt.xlabel('Accepted steps / total N of Spy proteins [-]')
+		plt.colorbar(label = 'N of Spy prots / total N of Spy prots [-]', shrink = 0.8, )
 		plt.show()
+		
 		
 	def dump_save(self, name, c = False):
 		start = time.time()
@@ -1176,7 +1208,7 @@ class Guesswork():
 					if N2 not in con_l[N1]:
 						Rcol12 = (self.T_dic[self.Tn[T1]]['Rcol'] + self.T_dic[self.Tn[T2]]['Rcol'])
 						if Rcol12 > l_col:
-							Ucol += 0.5 * self.F_coll[1] * (Rcol12 - l_col)**2
+							Ucol += 0.5 * self.k_coll * (Rcol12 - l_col)**2
 				if self.linking_collisions:
 					# Check for previously found bonding collision
 					if 	points[N1,7] == 1. and points[N2,7] == 1.:
@@ -1184,7 +1216,7 @@ class Guesswork():
 							Ucol += self.U_bond
 					# Check for new found bonding collision
 					if l_col <= self.link_r:
-						if  self.T_dic[self.Tn[T1]]['PT'] != self.T_dic[self.Tn[T2]]['PT'] and points[N1,7]==0. and points[N2,7]==0. and (self.link_chance - np.random.rand(1)) > 0. :
+						if  self.T_dic[self.Tn[T1]]['PT'] != self.T_dic[self.Tn[T2]]['PT'] and points[N1,7]==0. and points[N2,7]==0.:# and (self.link_chance - self.rs.rand(1)) > 0. :
 							points[N1,7:9] = 1., N2
 							points[N2,7:9] = 1., N1
 							Ucol += self.U_bond
@@ -1213,8 +1245,8 @@ class Guesswork():
 		Algo from http://stackoverflow.com/questions/5408276/python-uniform-spherical-distribution
 		:return:
 		"""
-		phi = np.random.uniform(0,np.pi*2)
-		costheta = np.random.uniform(-1,1)
+		phi = self.rs.uniform(0,np.pi*2)
+		costheta = self.rs.uniform(-1,1)
 
 		theta = np.arccos( costheta )
 		x = np.sin( theta) * np.cos( phi )
@@ -1255,66 +1287,91 @@ class Guesswork():
 		cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
 		return np.arccos(cosine_angle)
 
-	def data_save(self, name):
-		""" Writes the output (in lammps data format) """
-		self.save_path = os.path.join(self.dumps_dir, name+'.data')
-		points = self.points[:,1:4]
-		bonds = self.links[:,0:2].astype('uint64')
-		'''
-		continu = True
-		while continu:
-			print('iter')
-			continu = False
-			vecs = np.zeros((bonds.shape[0],9))
-			for i, bond in enumerate(bonds):
-				vecs[i,0:6] = *points[int(bond[0]),0:3], *points[int(bond[1]),0:3]
-			vecs[:,6:9] = np.abs(vecs[:,3:6] - vecs[:,0:3])
-			max_l = self.box/2.
-			for i, vec in enumerate(vecs):
-				for dim in range(3):
-					if vec[6+dim] >= max_l:
-						#print('guh')
-						continu = True
-						if vec[0+dim] < vec[3+dim]:
-							points[bonds[i,0],dim] += self.box
-						else :
-							points[bonds[i,1],dim] += self.box
-		#'''
-		
-		
+	def data_save(self, name, color_by=0):
+		""" Writes the output (in lammps data format)
+		color_by=0 : colors by protein type
+		color_by=1 : colors by objects
+		"""
+		self.save_path = os.path.join(self.data_dir, name+'.data')
+		#point [type, x, y, z, color]
+		points = np.zeros(self.points[:,0:5].shape)
+		points[:,0] = self.points[:,5]
+		points[:,1:4] = self.points[:,1:4]
+		points[:,4] = self.points[:,9]
+		bonds = np.zeros(self.links[:,0:2].shape,dtype = 'uint64')
+		bonds[:,:] = self.links[:,0:2].astype('uint64')
+
+		r = 10/self.box
+		print('type 1 r = {}, type 2 r = {}'.format(self.L_tag/2*r, self.L_cat/2*r))
+		points[:,1:4] *= r
+
 		try: os.remove(self.save_path)
 		except OSError as e: # this would be "except OSError, e:" before Python 2.6
 			if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
 				raise # re-raise exception if a different error occurred
 		
-		xb = 0#0.01*self.box #extra bounding box space, links are not visible if they coincide with bb
-		with open(self.save_path, 'a') as fp:    
+		xb = 0 #0.01*self.box #extra bounding box space, links are not visible if they coincide with bb
+		
+		if color_by==0:
+			a_types = 2 # Atom types
+			b_types = 2 # Bond types
+		if color_by==1:
+			a_types = len(self.obj_colours_list) # Atom types
+			b_types = len(self.obj_colours_list) # Bond types
+		with open(self.save_path, 'a') as fp:  
+			  
 			fp.write('LAMMPS Description\n')
 			fp.write('{} atoms\n'.format(points.shape[0]))
 			fp.write('{} bonds\n'.format(bonds.shape[0]))
-			fp.write('{} atom types\n'.format(1))
-			fp.write('{} bond types\n'.format(1))
-			fp.write('{} {} xlo xhi\n'.format(np.min(points[:,0])-xb, np.max(points[:,0])+xb))
-			fp.write('{} {} ylo yhi\n'.format(np.min(points[:,1])-xb, np.max(points[:,1])+xb))
-			fp.write('{} {} zlo zhi\n'.format(np.min(points[:,2])-xb, np.max(points[:,2])+xb))
+			fp.write('{} atom types\n'.format(a_types))
+			fp.write('{} bond types\n'.format(b_types))
+			fp.write('{} {} xlo xhi\n'.format(np.min(points[:,1])-xb, np.max(points[:,1])+xb))
+			fp.write('{} {} ylo yhi\n'.format(np.min(points[:,2])-xb, np.max(points[:,2])+xb))
+			fp.write('{} {} zlo zhi\n'.format(np.min(points[:,3])-xb, np.max(points[:,3])+xb))
+			fp.write('\nMasses\n\n')
+			for i in range(a_types):
+				fp.write('{} {}\n'.format(i+1, i))
+			
 			fp.write('\nAtoms\n\n')
 			for i, point in enumerate(points):
-				fp.write('{} 1 {} {} {}\n'.format(i+1, point[0], point[1], point[2]))
+				if color_by==0:
+					if self.T_dic[self.Tn[int(point[0])]]['PT']=='t':
+						fp.write('{} 1 {} {} {}\n'.format(i+1, point[1], point[2], point[3]))
+					else:
+						fp.write('{} 2 {} {} {}\n'.format(i+1, point[1], point[2], point[3]))
+				
+				if color_by==1:
+					index = self.obj_colours_list.index(point[4])
+					fp.write('{} {} {} {} {}\n'.format(i+1, index+1, point[1], point[2], point[3]))
+			
+			
 			fp.write('\nBonds\n\n')
 			for i, bond in enumerate(bonds):
-				fp.write('{} 1 {} {}\n'.format(i+1, int(bond[0]+1), int(bond[1]+1)))
-
+				if color_by==0:
+					if self.T_dic[self.Tn[int(points[bond[0],0])]]['PT']=='t':
+						fp.write('{} 1 {} {}\n'.format(i+1, int(bond[0]+1), int(bond[1]+1)))
+					else:
+						fp.write('{} 2 {} {}\n'.format(i+1, int(bond[0]+1), int(bond[1]+1)))
+				
+				if color_by==1:
+					index = self.obj_colours_list.index(points[bond[0],4])
+					fp.write('{} {} {} {}\n'.format(i+1, index+1, int(bond[0]+1), int(bond[1]+1)))
+				
 if __name__ == '__main__':
-	
+	#try:
 	MC = Guesswork()
-	#points, links, con_l, col_l = MC.create_arrs()
 	
 	#MC.run_MC()
 	MC.seq_runs()
+	#MC.seq_runs()
 	
-	name = 'mc_runb'
+	name = 'val_tt-cc'
 	#MC.dump_save(name)
-	#MC.data_save(name)
+	MC.data_save(name, color_by=1)
+	#color_by=0 : colors by protein type
+	#color_by=1 : colors by objects
 	
+	#except Exception as e:
+	#	print(e)
 	winsound.Beep(frequency, duration)
 	
